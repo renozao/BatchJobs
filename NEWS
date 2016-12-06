@@ -1,11 +1,40 @@
-BatchJobs_1.5.1:
-- Fixed missing default for argument 'progressbar' in killJobs()
+BatchJobs_1.7:
+- Configuration files are now sourced while loading the namespace, not while
+  attaching the package.
+- Added OpenLava support
+- getJobInfo() now also displays time.running until an error occurred in the job,
+  and not NA as before
+- loadRegisty() now returns a read-only registry if a heuristic detects that the
+  location of the registy changed and the new argument "adjust.paths" is not
+  explicitly set to TRUE.
+- Fixed a bug where time.started was incorrectly stored if chunking was used.
+- Packages are now loaded in user provided order instead of alphabetically.
+- showClusterStatus now returns its information visibly and does not print it
+  per default
+- The 'max.load' setting for multicore and SSH is now set to a more aggressive
+  default.
+- New argument 'impute.val' for loadResult() and loadResults()
+- New config options: "measure.mem" to disable memory measurements on the slave
+- SSH: makeSSHWorker, debugSSH: ssh.cmd and ssh.args were added to customize the remote login
+- New functions:
+  -- setRegistryPackages()
+  -- reduceResultsDataTable()
+  -- getJobLocation()
+  -- batchQuery()
+
+BatchJobs_1.6:
+- Added functions: getStatus, removeRegistry, findDisappeared
 - All find* function now support a 'limit' argument (default unlimited)
 - We are less strict in arg checks of makeSSHWorker, so you can set a load higher than ncpus
-- Exported findDisapperead() heuristic to identify jobs the scheduler simply
-  "forgot" about
 - loadExports: added argument "what"
-- Added functions: getStatus
+- batchApply now works with arrays
+- filehandling for the registry, especially on Windows, was improved (Thx Henrik Bengtsson)
+- You can set pragmas via db.options in your config file.
+- The SQLite pragma "busy_timeout" is now set per default with a value of
+  5000ms.
+- The default number of cores is now retrieved from the option "mc.cores" rather
+- New configuration option BatchJobs.load.config
+- Fixed some minor things.
 
 BatchJobs_1.5:
 - Updated to use RSQLite >=1.0.0

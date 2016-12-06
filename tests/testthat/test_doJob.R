@@ -4,12 +4,12 @@ test_that("doJob", {
   id = 1L
   batchMap(reg, identity, 123)
   df = BatchJobs:::dbGetJobStatusTable(reg)
-  expect_true(is.data.frame(df) && nrow(df) == 1 && ncol(df) == 13)
+  expect_true(is.data.frame(df) && nrow(df) == 1L && ncol(df) == 14L)
   ids = findNotDone(reg)
   expect_equal(ids, id)
   BatchJobs:::saveConf(reg)
   expect_output({
-    y = BatchJobs:::doJob(reg, id, multiple.result.files=FALSE, disable.mail=TRUE, last=id, array.id=NA_integer_)
+    y = BatchJobs:::doJob(reg, id, multiple.result.files=FALSE, disable.mail=TRUE, last=id, array.id=NA_integer_, staged = FALSE)
   }, "BatchJobs job")
   waitForJobs(reg)
   expect_equal(y, TRUE)
@@ -35,7 +35,7 @@ test_that("doJob", {
   batchMap(reg, f, 1)
   BatchJobs:::saveConf(reg)
   expect_output({
-    y = BatchJobs:::doJob(reg, id, multiple.result.files=FALSE, disable.mail=TRUE, last=id, array.id=NA_integer_)
+    y = BatchJobs:::doJob(reg, id, multiple.result.files=FALSE, disable.mail=TRUE, last=id, array.id=NA_integer_, staged = FALSE)
   }, "BatchJobs job")
   expect_equal(y, TRUE)
   expect_equal(loadResult(reg, 1L), bar + 1)
@@ -50,13 +50,4 @@ test_that("doJob", {
   batchMap(reg, identity, 1)
   expect_error(suppressAll(testJob(reg, 1)), "Please install the following packages: foo")
   expect_equal(findNotDone(reg), id)
-
-  if (isExpensiveExampleOk()) {
-    reg = makeTestRegistry(packages=c("randomForest"))
-    f = function(i) randomForest(Species~., data=iris)
-    batchMap(reg, f, 1)
-    submitJobs(reg)
-    waitForJobs(reg)
-    expect_equal(length(findNotDone(reg)), 0)
-  }
 })

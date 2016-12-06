@@ -6,22 +6,27 @@
 #'
 #' @template arg_reg
 #' @param what [\code{character}]\cr
-#'   Names of objects and corresponding \dQuote{RData} files which should be loaded.
-#'   Default \code{NULL} loads all files.
+#'   Names of objects to load. Defaults to all objects exported.
 #' @return [\code{character}]. Invisibly returns a character vector of loaded objects.
 #' @family exports
 #' @export
 loadExports = function(reg, what = NULL) {
-  checkRegistry(reg)
+  checkRegistry(reg, writeable = FALSE)
   if (!is.null(what))
     assertCharacter(what, any.missing = FALSE)
-  f = fail(getExportDir(reg$file.dir), extension = "RData", simplify = FALSE)
-  keys = f$ls()
-  if (!is.null(what))
-    keys = intersect(keys, what)
-  if (length(keys) > 0L) {
+  path = getExportDir(reg$file.dir)
+  fns = list.files(path, pattern = "\\.RData$", all.files = TRUE)
+  keys = gsub("\\.RData$", "", fns)
+  if (!is.null(what)) {
+    i = which(keys %in% what)
+    fns = fns[i]
+    keys = keys[i]
+  }
+
+  if (length(fns) > 0L) {
     messagef("Loading RData files: %s", collapse(keys))
-    f$assign(keys, envir = .GlobalEnv)
+    for (i in seq_along(fns))
+      assign(keys[i], load2(file.path(path, fns[i]), envir = .GlobalEnv))
   }
   invisible(keys)
 }
@@ -44,26 +49,29 @@ loadExports = function(reg, what = NULL) {
 #' @family exports
 #' @export
 batchExport = function(reg, ..., li = list(), overwrite = FALSE) {
-  checkRegistry(reg)
+  checkRegistry(reg, writeable = FALSE)
   ddd = list(...)
   assertList(li, names = "strict")
   assertList(ddd, names = "strict")
   assertFlag(overwrite)
+
   keys = c(names(li), names(ddd))
   dup = anyDuplicated(keys)
   if (dup > 0L)
     stopf("Object for export provided more than once: '%s'", keys[dup])
-
-  f = fail(getExportDir(reg$file.dir), extension = "RData", simplify = FALSE)
+  path = getExportDir(reg$file.dir)
 
   if (!overwrite) {
-    collision = which.first(keys %in% f$ls())
+    fns = list.files(path, pattern = "\\.RData$", all.files = TRUE)
+    old.keys = gsub("\\.RData$", "", fns)
+    collision = which.first(keys %in% old.keys)
     if (length(collision) > 0L)
       stopf("Object named '%s' already exported and 'overwrite' is set to FALSE", keys[collision])
   }
 
-  f$put(li = li)
-  f$put(li = ddd)
+  objs = list2env(c(li, ddd))
+  for (i in seq_along(keys))
+    save(list = keys[i], envir = objs, file = file.path(path, sprintf("%s.RData", keys[i])))
   invisible(keys)
 }
 
@@ -80,11 +88,14 @@ batchExport = function(reg, ..., li = list(), overwrite = FALSE) {
 #' @family exports
 #' @export
 batchUnexport = function(reg, what) {
-  checkRegistry(reg)
+  checkRegistry(reg, writeable = FALSE)
   assertCharacter(what, any.missing = FALSE)
 
-  f = fail(getExportDir(reg$file.dir), extension = "RData", simplify = FALSE)
-  keys = intersect(f$ls(), what)
-  f$remove(keys)
-  invisible(keys)
+  path = getExportDir(reg$file.dir)
+  fns = list.files(path, pattern = "\\.RData$", all.files = TRUE)
+  keys = gsub("\\.RData$", "", fns)
+
+  i = which(keys %in% what)
+  file.remove(file.path(path, fns[i]))
+  invisible(keys[i])
 }

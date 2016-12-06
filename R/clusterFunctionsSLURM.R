@@ -40,7 +40,7 @@ makeClusterFunctionsSLURM = function(template.file, list.jobs.cmd = c("squeue", 
     } else if (res$exit.code > 0L) {
       cfHandleUnknownSubmitError("sbatch", res$exit.code, res$output)
     } else {
-      makeSubmitJobResult(status = 0L, batch.job.id = str_trim(strsplit(output, split = " ")[[1L]][4L]))
+      makeSubmitJobResult(status = 0L, batch.job.id = stri_trim_both(stri_split_fixed(output, " ")[[1L]][4L]))
     }
   }
 
@@ -50,7 +50,8 @@ makeClusterFunctionsSLURM = function(template.file, list.jobs.cmd = c("squeue", 
 
   listJobs = function(conf, reg) {
     # Result is lines of fully quantified batch.job.ids
-    runOSCommandLinux(list.jobs.cmd[1L], list.jobs.cmd[-1L])$output
+    jids = runOSCommandLinux(list.jobs.cmd[1L], list.jobs.cmd[-1L])$output
+    stri_extract_first_regex(jids, "[0-9]+")
   }
 
   getArrayEnvirName = function() "SLURM_ARRAY_TASK_ID"

@@ -33,18 +33,17 @@ test_that("exports with batchExport and batchUnexport", {
   submitJobs(reg, 1)
   waitForJobs(reg)
   expect_equal(length(findErrors(reg)), 1)
-  expect_true(grepl("not found", getErrorMessages(reg, 1), fixed = TRUE))
+  expect_true(grepl("(found|gefunden)", getErrorMessages(reg, 1), fixed = FALSE))
 })
 
 test_that("export: load defined files with loadExports", {
   reg = makeTestRegistry()
   batchExport(reg, x.1 = 4, x.2 = 3, x.3 = 2, x.4 = 1)
-  suppressMessages(loadExports(reg, paste0("x.", seq(2, 6, 2))))
-  expect_false(exists("x.1", where = .GlobalEnv))
+  suppressMessages(loadExports(reg))
+  expect_true(exists("x.1", where = .GlobalEnv))
   expect_true(exists("x.2", where = .GlobalEnv))
-  expect_false(exists("x.3", where = .GlobalEnv))
+  expect_true(exists("x.3", where = .GlobalEnv))
   expect_true(exists("x.4", where = .GlobalEnv))
-  expect_false(exists("x.6", where = .GlobalEnv))
 })
 
 #FIXME:

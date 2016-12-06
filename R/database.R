@@ -5,19 +5,17 @@ sqlQuote = function(x) {
   sprintf("'%s'", x)
 }
 
-dbGetConnection = function(drv, ...) {
-  # method dispatch tp support different DBMS
+dbGetConnection = function(drv, reg, ...) {
+  # method dispatch to support different DBMS
   UseMethod("dbGetConnection")
 }
 
 dbGetConnection.SQLiteDriver = function(drv, reg, flags = "ro", ...) {
   flags = switch(flags, "ro" = SQLITE_RO, "rw" = SQLITE_RW, "rwc" = SQLITE_RWC)
   opts = list(dbname = file.path(reg$file.dir, "BatchJobs.db"), flags = flags, drv = drv)
-  con = do.call(dbConnect, args = c(reg$db.options, opts))
-  res = dbSendQuery(con, "PRAGMA busy_timeout=5000")
-  dbClearResult(res)
-  res = dbSendQuery(con, "PRAGMA journal_mode=WAL")
-  dbClearResult(res)
+  con = do.call(dbConnect, args = c(dropNamed(reg$db.options, "pragmas"), opts))
+  for (pragma in reg$db.options$pragmas)
+    dbClearResult(dbSendQuery(con, sprintf("PRAGMA %s", pragma)))
   return(con)
 }
 
@@ -35,7 +33,7 @@ dbDoQueries = function(reg, queries, flags = "ro", max.retries = 100L, sleep = f
     } else {
       ok = try ({
         dbBegin(con)
-        ress = lapply(queries, dbGetQuery, con = con)
+        ress = lapply(queries, dbGetQuery, conn = con)
       }, silent = TRUE)
       if (!is.error(ok)) {
         # this can fail because DB is locked
@@ -88,20 +86,27 @@ dbDoQuery = function(reg, query, flags = "ro", max.retries = 100L, sleep = funct
   stopf("dbDoQuery: max retries (%i) reached, database is still locked!", max.retries)
 }
 
-
 dbAddData = function(reg, tab, data) {
   query = sprintf("INSERT INTO %s_%s (%s) VALUES(%s)", reg$id, tab,
                   collapse(colnames(data)), collapse(rep.int("?", ncol(data))))
   con = dbConnectToJobsDB(reg, flags = "rw")
   on.exit(dbDisconnect(con))
-  dbBegin(con)
-  ok = try(dbGetPreparedQuery(con, query, bind.data = data))
-  if(is.error(ok)) {
-    dbRollback(con)
-    stopf("Error in dbAddData: %s", as.character(ok))
-  }
 
+  dbBegin(con)
+  res = dbSendQuery(con, query)
+  for (i in seq_row(data)) {
+    row = unname(as.list(data[i, ]))
+    dbBind(res, row)
+    ok = try(dbFetch(res))
+    if(is.error(ok)) {
+      dbClearResult(res)
+      dbRollback(con)
+      stopf("Error in dbAddData: %s", as.character(ok))
+    }
+  }
+  dbClearResult(res)
   dbCommit(con)
+
   as.integer(dbGetQuery(con, "SELECT total_changes()"))
 }
 
@@ -143,7 +148,7 @@ dbCreateJobStatusTable = function(reg, extra.cols = "", constraints = "") {
   query = sprintf(paste("CREATE TABLE %s_job_status (job_id INTEGER PRIMARY KEY, job_def_id INTEGER,",
                    "first_job_in_chunk_id INTEGER, seed INTEGER, resources_timestamp INTEGER, memory REAL, submitted INTEGER,",
                    "started INTEGER, batch_job_id TEXT, node TEXT, r_pid INTEGER,",
-                   "done INTEGER, error TEXT %s %s)"), reg$id, extra.cols, constraints)
+                   "done INTEGER, error TEXT, error_time INTEGER %s %s)"), reg$id, extra.cols, constraints)
   dbDoQuery(reg, query, flags = "rwc")
 
   query = sprintf("CREATE INDEX job_def_id ON %s_job_status(job_def_id)", reg$id)
@@ -163,8 +168,7 @@ dbCreateExpandedJobsView = function(reg) {
 ############################################
 
 #' ONLY FOR INTERNAL USAGE.
-#' @param reg [\code{\link{Registry}}]\cr
-#'   Registry.
+#' @template arg_reg
 #' @param ids [\code{integer}]\cr
 #'   Ids of selected jobs.
 #' @return [list of \code{\link{Job}}]. Retrieved jobs from DB.
@@ -360,27 +364,19 @@ dbMatchJobNames = function(reg, ids, jobnames) {
 }
 
 ############################################
-### DELETE
-############################################
-dbRemoveJobs = function(reg, ids) {
-  query = sprintf("DELETE FROM %s_job_status WHERE job_id IN (%s)", reg$id, collapse(ids))
-  dbDoQuery(reg, query, flags = "rw")
-  query = sprintf("DELETE FROM %1$s_job_def WHERE job_def_id NOT IN (SELECT DISTINCT job_def_id FROM %1$s_job_status)", reg$id)
-  dbDoQuery(reg, query, flags = "rw")
-  return(invisible(TRUE))
-}
-
-
-############################################
 ### Messages
 ############################################
 dbSendMessage = function(reg, msg, staged = useStagedQueries(), fs.timeout = NA_real_) {
+  ## AD HOC/FIXME: Avoid partial matching; some functions pass 'msg' with
+  ## field 'msgs' and some with field 'msg' (e.g. dbMakeMessageError()).
+  msgT <- if ("msgs" %in% names(msg)) msg$msgs else msg$msg
+
   if (staged) {
     fn = getPendingFile(reg, msg$type, msg$ids[1L])
-    writeSQLFile(msg$msg, fn)
+    writeSQLFile(msgT, fn)
     waitForFiles(fn, timeout = fs.timeout)
   } else {
-    dbDoQuery(reg, msg$msg, flags = "rw")
+    dbDoQuery(reg, msgT, flags = "rw")
   }
 }
 
@@ -439,11 +435,11 @@ dbMakeMessageStarted = function(reg, job.ids, time = now(), type = "started") {
        type = type)
 }
 
-dbMakeMessageError = function(reg, job.ids, err.msg, memory = -1, type = "error") {
+dbMakeMessageError = function(reg, job.ids, err.msg, time = now(), memory = -1, type = "error") {
   # FIXME how to escape ticks (')? Just replaced with double quotes for the moment
   err.msg = gsub("'", "\"", err.msg, fixed = TRUE)
   err.msg = gsub("[^[:print:]]", " ", err.msg)
-  updates = sprintf("error='%s', done=NULL, memory='%.4f'", err.msg, memory)
+  updates = sprintf("error='%s', error_time=%i, done=NULL, memory='%.4f'", err.msg, time, memory)
   list(msg = sprintf("UPDATE %s_job_status SET %s WHERE job_id in (%s)", reg$id, updates, collapse(job.ids)),
        ids = job.ids,
        type = type)
@@ -476,4 +472,13 @@ dbSetJobFunction = function(reg, ids, fun.id) {
 dbSetJobNames = function(reg, ids, jobnames) {
   queries = sprintf("UPDATE %1$s_job_def SET jobname = '%2$s' WHERE job_def_id IN (SELECT job_def_id FROM %1$s_job_status WHERE job_id IN (%3$i))", reg$id, jobnames, ids)
   dbDoQueries(reg, queries, flags = "rw")
+}
+
+# this is used in parallelMap :/
+dbRemoveJobs = function(reg, ids) {
+  query = sprintf("DELETE FROM %s_job_status WHERE job_id IN (%s)", reg$id, collapse(ids))
+  dbDoQuery(reg, query, flags = "rw")
+  query = sprintf("DELETE FROM %1$s_job_def WHERE job_def_id NOT IN (SELECT DISTINCT job_def_id FROM %1$s_job_status)", reg$id)
+  dbDoQuery(reg, query, flags = "rw")
+  return(invisible(TRUE))
 }

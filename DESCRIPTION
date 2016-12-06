@@ -5,7 +5,8 @@ Description: Provides Map, Reduce and Filter variants to generate jobs on batch
     Multicore and SSH systems are also supported. For further details see the
     project web page.
 Author: Bernd Bischl <bernd_bischl@gmx.net>,
-    Michel Lang <michellang@gmail.com>
+    Michel Lang <michellang@gmail.com>,
+    Henrik Bengtsson <henrikb@braju.com>
 Maintainer: Bernd Bischl <bernd_bischl@gmx.net>
 URL: https://github.com/tudo-r/BatchJobs
 BugReports: https://github.com/tudo-r/BatchJobs/issues
@@ -18,15 +19,15 @@ Depends:
     methods
 Imports:
     brew,
-    checkmate (>= 1.5),
+    checkmate (>= 1.8.0),
+    data.table (>= 1.9.6),
     DBI,
     digest,
-    fail (>= 1.2),
     parallel,
-    RSQLite (>= 1.0.0),
+    RSQLite (>= 1.0.9011),
     sendmailR,
     stats,
-    stringr,
+    stringi (>= 0.4-1),
     utils
 Suggests:
     MASS,
@@ -34,4 +35,5 @@ Suggests:
     devtools
 LazyData: yes
 ByteCompile: yes
-Version: 1.6
+Version: 1.7
+RoxygenNote: 5.0.1
